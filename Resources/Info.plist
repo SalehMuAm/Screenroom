@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>Screenroom</string>
+    <key>CFBundleIdentifier</key>
+    <string>app.screenroom.Screenroom</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Screenroom</string>
+    <key>CFBundleDisplayName</key>
+    <string>Screenroom</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleIconFile</key>
+    <string>Screenroom</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Screenroom captures only the screen or window you choose, for screenshots and recordings.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Screenroom includes audio from the selected software only when you enable system audio. It never records the microphone.</string>
+</dict>
+</plist>
