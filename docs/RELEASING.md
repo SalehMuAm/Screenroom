@@ -2,7 +2,9 @@
 
 Releases are prepared on a Mac. GitHub Actions checks tests and packaging; it does not hold signing credentials or publish releases.
 
-The first public preview, **v1.0.3**, is an **Apple silicon, ad-hoc signed, unnotarized** download. It is marked as a prerelease. A verified archive and checksum do not replace Apple's notarization. Keep that distinction explicit in release notes until Developer ID signing and notarization are available.
+The current public preview, **v1.0.4**, is an **Apple silicon, ad-hoc signed, unnotarized** download requiring **macOS 15 or later**. It is marked as a prerelease. A verified archive and checksum do not replace Apple's notarization. Keep that distinction explicit in release notes until Developer ID signing and notarization are available.
+
+For v1.0.4, manual checks with full-screen apps, Spaces, Stage Manager, and physical keyboard shortcuts remain incomplete. Carry these limitations into the release notes.
 
 ## Prepare the source
 
@@ -22,11 +24,11 @@ SIGNING_IDENTITY=- ./scripts/build-app.sh
 ./scripts/package-release.sh
 ```
 
-The build includes the MIT license in `Screenroom.app/Contents/Resources/LICENSE`. Packaging verifies the existing bundle signature and creates these files for version 1.0.3 on Apple silicon:
+The build includes the MIT license in `Screenroom.app/Contents/Resources/LICENSE`. Packaging verifies the existing bundle signature and creates these files for version 1.0.4 on Apple silicon:
 
 ```text
-dist/Screenroom-1.0.3-macos-arm64.zip
-dist/Screenroom-1.0.3-macos-arm64.zip.sha256
+dist/Screenroom-1.0.4-macos-arm64.zip
+dist/Screenroom-1.0.4-macos-arm64.zip.sha256
 ```
 
 The packager does not change the signature. It excludes resource-fork metadata and refuses to overwrite an existing archive or checksum. To package a different bundle or use an empty output folder:
@@ -67,8 +69,8 @@ Upload the archive and checksum from `dist/notarized`, which were created **afte
 From the directory containing the final archive and checksum, check both:
 
 ```sh
-shasum -a 256 -c Screenroom-1.0.3-macos-arm64.zip.sha256
-unzip -t Screenroom-1.0.3-macos-arm64.zip
+shasum -a 256 -c Screenroom-1.0.4-macos-arm64.zip.sha256
+unzip -t Screenroom-1.0.4-macos-arm64.zip
 ```
 
 Also extract the ZIP into an empty temporary folder and run `codesign --verify --strict` against the extracted app. Check its version, architecture, and bundled license. Ensure the release contains no recordings, crash reports, development signing material, or local paths. Build output stays ignored by Git; only the ZIP and checksum belong in release assets.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.4 — 2026-10-14
 
 - Keep capture selection over the active app and return focus before screenshots and recordings started from Screenroom.
 - Handle cancellation and failed focus restoration before recording starts.
@@ -10,6 +10,10 @@
 - Validate build/run options before taking action, and support `--help` without installing anything.
 - Reject release output inside the app even through case or symlink aliases on macOS.
 - Add regression coverage for editor preservation, library recovery, and release scripts.
+
+### Preview limitations
+
+The downloadable app requires macOS 15 or later and is Apple-silicon-only, ad-hoc signed, and not notarized. Manual checks with full-screen apps, Spaces, Stage Manager, and physical keyboard shortcuts remain incomplete. Intel source builds are not runtime-verified.
 
 ## 1.0.3 — 2026-10-14
 

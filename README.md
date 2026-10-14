@@ -4,7 +4,7 @@ A lightweight, native macOS screen recorder and screenshot editor. Capture your 
 
 Built with **SwiftUI, AppKit, and ScreenCaptureKit**. No web runtime, third-party dependencies, audio drivers, accounts, or uploads.
 
-[Download the preview](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.3) · [Install and setup](docs/SETUP.md) · [Contribute or fork](CONTRIBUTING.md) · [Report a bug](https://github.com/SalehMuAm/Screenroom/issues/new/choose)
+[Download the preview](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.4) · [Install and setup](docs/SETUP.md) · [Contribute or fork](CONTRIBUTING.md) · [Report a bug](https://github.com/SalehMuAm/Screenroom/issues/new/choose)
 
 ## What it does
 
@@ -21,7 +21,7 @@ Built with **SwiftUI, AppKit, and ScreenCaptureKit**. No web runtime, third-part
 
 Requires **macOS 15 or later**. The current preview download is for **Apple silicon (M1 or later)**; there is no prebuilt Intel or universal app.
 
-1. Open [Releases](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.3) and download `Screenroom-1.0.3-macos-arm64.zip` and its checksum file.
+1. Open [Releases](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.4) and download `Screenroom-1.0.4-macos-arm64.zip` and its checksum file.
 2. Verify the download using the instructions in [Setup](docs/SETUP.md), then unzip it.
 3. Move **Screenroom.app** into **Applications**. Quit an older copy before replacing it.
 4. Open Screenroom from Applications and grant Screen Recording access when requested.
@@ -74,6 +74,7 @@ For screenshots, capture or open an image, add your annotations, then copy or ex
 - Video trimming and annotations on video are not included.
 - macOS can stop recording under storage pressure. Screenroom warns below 5 GiB free and refuses to start below 1 GiB, but that minimum cannot prevent every system interruption.
 - Global shortcuts can conflict with other apps. Registration failures appear in Settings; another app can also intercept a shortcut. See [troubleshooting](docs/SETUP.md#troubleshooting).
+- In the 1.0.4 preview, manual checks with full-screen apps, Spaces, Stage Manager, and physical keyboard shortcuts remain incomplete.
 - This is an early preview. Test a short recording before relying on it for an important session.
 
 ## Your files stay on your Mac

@@ -6,13 +6,13 @@ Xcode is not needed to run a downloaded app. A source build uses your Mac's arch
 
 ## Install the preview download
 
-The **1.0.3 preview is for Apple silicon (arm64), macOS 15 or later**. It is ad-hoc signed and **not notarized**. It does not yet provide the normal installation experience of a Developer ID signed, notarized Mac app. Intel users should build from source; no Intel prebuilt app is provided.
+The **1.0.4 preview is for Apple silicon (arm64), macOS 15 or later**. It is ad-hoc signed and **not notarized**. It does not yet provide the normal installation experience of a Developer ID signed, notarized Mac app. Intel users should build from source; no Intel prebuilt app is provided.
 
-1. Download `Screenroom-1.0.3-macos-arm64.zip` and `Screenroom-1.0.3-macos-arm64.zip.sha256` from the [v1.0.3 release](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.3).
+1. Download `Screenroom-1.0.4-macos-arm64.zip` and `Screenroom-1.0.4-macos-arm64.zip.sha256` from the [v1.0.4 release](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.4).
 2. Put both files in the same folder. In Terminal, from that folder, verify the ZIP against the published checksum:
 
 ```sh
-shasum -a 256 -c Screenroom-1.0.3-macos-arm64.zip.sha256
+shasum -a 256 -c Screenroom-1.0.4-macos-arm64.zip.sha256
 ```
 
 3. Check that verification reports `OK`. Expand the ZIP, quit any running Screenroom, and move `Screenroom.app` into **Applications** before opening it.
@@ -20,6 +20,8 @@ shasum -a 256 -c Screenroom-1.0.3-macos-arm64.zip.sha256
 5. Follow [Grant capture access](#5-grant-capture-access) below. Updating to a different ad-hoc build may require capture permission again.
 
 The checksum checks the downloaded file against the release; it does not substitute for Apple's notarization. For ongoing source development, a stable local Apple Development certificate is recommended.
+
+Manual checks with full-screen apps, Spaces, Stage Manager, and physical keyboard shortcuts remain incomplete for this preview. Try a short capture in your intended setup before an important session.
 
 ## Build from source
 
