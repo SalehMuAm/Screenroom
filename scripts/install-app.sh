@@ -1,15 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [[ "${1:-}" == "--no-build" ]]; then
-    shift
-else
-    "$ROOT/scripts/build-app.sh"
+usage() {
+    printf '%s\n' 'Usage: ./scripts/install-app.sh [--no-build]'
+}
+if [[ $# -eq 1 && "$1" == "--help" ]]; then
+    usage
+    exit 0
 fi
-if [[ $# -ne 0 ]]; then
-    printf '%s\n' 'Usage: ./scripts/install-app.sh [--no-build]' >&2
+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != "--no-build" ) ]]; then
+    usage >&2
     exit 1
+fi
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ $# -eq 0 ]]; then
+    "$ROOT/scripts/build-app.sh"
 fi
 
 SOURCE_APP="$ROOT/dist/Screenroom.app"

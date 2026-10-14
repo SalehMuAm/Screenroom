@@ -7,7 +7,7 @@ enum WorkspacePage: String { case capture, library }
 @MainActor
 final class AppModel: ObservableObject {
     let capture = CaptureService()
-    let library = CaptureLibrary()
+    let library: CaptureLibrary
     @Published var page: WorkspacePage = .capture
     @Published var selectedItem: CaptureItem?
     @Published var mode: CaptureKind = .screenshot
@@ -28,12 +28,13 @@ final class AppModel: ObservableObject {
     private var subscriptions: Set<AnyCancellable> = []
     private var hotKeys: HotKeyManager?
 
-    init() {
+    init(library: CaptureLibrary? = nil, registerHotKeys: Bool = true) {
+        self.library = library ?? CaptureLibrary()
         refreshRecordingStorage()
         capture.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &subscriptions)
-        library.objectWillChange.sink { [weak self] _ in
+        self.library.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &subscriptions)
         capture.$errorMessage.compactMap { $0 }.sink { [weak self] message in
@@ -61,16 +62,22 @@ final class AppModel: ObservableObject {
         capture.onRecordingFinished = { [weak self] url in
             guard let self else { return }
             let item = self.library.add(url: url, kind: .recording)
-            self.selectedItem = item
-            self.page = .library
-            self.notice = self.capture.errorMessage == nil ? "Recording saved" : "Recording ended early · video saved"
+            // The user may have reopened a screenshot while recording. Keep
+            // that editor mounted, including edits awaiting a SwiftUI update.
+            if self.selectedItem == nil {
+                self.selectedItem = item
+                self.page = .library
+            }
+            self.notice = self.capture.errorMessage == nil ? "Recording saved to library" : "Recording ended early · video saved"
             self.showMainWindow()
         }
-        hotKeys = HotKeyManager(onScreenshot: { [weak self] in
-            self?.takeScreenshot()
-        }, onRecording: { [weak self] in
-            self?.toggleRecording()
-        })
+        if registerHotKeys {
+            hotKeys = HotKeyManager(onScreenshot: { [weak self] in
+                self?.takeScreenshot()
+            }, onRecording: { [weak self] in
+                self?.toggleRecording()
+            })
+        }
     }
 
     var busy: Bool { isTakingScreenshot || capture.isBusy }
@@ -89,8 +96,9 @@ final class AppModel: ObservableObject {
     }
 
     func showMainWindow() {
+        guard let mainWindow else { return }
         NSApp.activate(ignoringOtherApps: true)
-        mainWindow?.makeKeyAndOrderFront(nil)
+        mainWindow.makeKeyAndOrderFront(nil)
     }
 
     func takeScreenshot() {
@@ -169,6 +177,16 @@ final class AppModel: ObservableObject {
         panel.allowedContentTypes = [.png, .jpeg, .tiff, .heic]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        openImage(at: url)
+    }
+
+    func openImage(at url: URL) {
+        // Selecting the same file keeps the existing editor and its dirty
+        // state; its stable library ID would otherwise keep discarded edits.
+        if selectedItem?.kind == .screenshot,
+           selectedItem?.url.standardizedFileURL == url.standardizedFileURL {
+            return
+        }
         guard confirmLeavingEditor() else { return }
         editorIsDirty = false
         selectedItem = library.add(url: url, kind: .screenshot)

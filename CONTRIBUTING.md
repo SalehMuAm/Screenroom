@@ -70,6 +70,14 @@ For a release configuration check:
 swift test --configuration release
 ```
 
+For changes to installation or release scripts, run the isolated shell checks:
+
+```sh
+./scripts/tests/shell-regressions.sh
+```
+
+These use temporary fixtures and do not install or open Screenroom.
+
 These checks do not establish that macOS permissions, global shortcuts, audio capture, or video playback work. Test those through the installed `.app` bundle when your change affects them. Running `swift run` or the executable under `.build` does not reproduce the normal installed-app identity and permission flow.
 
 Build a bundle with your usual signing identity, quit the running app, and install it:

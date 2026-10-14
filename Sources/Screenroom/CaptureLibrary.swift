@@ -52,6 +52,8 @@ final class CaptureLibrary: ObservableObject {
     private let indexURL: URL
     private let picturesDirectory: URL
     private let moviesDirectory: URL
+    private var needsIndexBackup = false
+    private var indexBackupURL: URL?
 
     init(rootDirectory: URL? = nil) {
         let files = FileManager.default
@@ -69,6 +71,7 @@ final class CaptureLibrary: ObservableObject {
             do {
                 items = try JSONDecoder().decode([CaptureItem].self, from: Data(contentsOf: indexURL))
             } catch {
+                needsIndexBackup = true
                 persistenceError = "The capture library could not be loaded. Your original files are still in Pictures/Screenroom and Movies/Screenroom. \(error.localizedDescription)"
             }
         }
@@ -114,11 +117,26 @@ final class CaptureLibrary: ObservableObject {
     private func persist() {
         do {
             try FileManager.default.createDirectory(at: indexURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if needsIndexBackup {
+                let backup = indexURL.deletingLastPathComponent()
+                    .appendingPathComponent("library-unreadable-\(UUID().uuidString).json")
+                // Never replace an index we could not read until its contents
+                // have been preserved. A failed copy leaves persistence blocked.
+                try FileManager.default.copyItem(at: indexURL, to: backup)
+                indexBackupURL = backup
+                needsIndexBackup = false
+                persistenceError = "The previous library index could not be loaded. A backup was saved at \(backup.path). Your media files were not deleted."
+            }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(items).write(to: indexURL, options: .atomic)
         } catch {
-            persistenceError = "Your capture is saved, but the library index could not be updated. \(error.localizedDescription)"
+            if needsIndexBackup {
+                persistenceError = "Your capture is saved, but the unreadable library index at \(indexURL.path) could not be backed up. It has been left unchanged. \(error.localizedDescription)"
+            } else {
+                let recovery = indexBackupURL.map { " The previous library index is backed up at \($0.path)." } ?? ""
+                persistenceError = "Your capture is saved, but the library index could not be updated.\(recovery) \(error.localizedDescription)"
+            }
         }
     }
 }

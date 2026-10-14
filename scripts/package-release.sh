@@ -80,12 +80,17 @@ canonical_directory() {
     fi
 }
 DIST_DIR="$(canonical_directory "$DIST_DIR")"
-case "$DIST_DIR" in
-    "$APP_PATH"|"$APP_PATH"/*)
+# Compare directory identities rather than path spelling. On the default
+# case-insensitive macOS filesystem, pwd preserves case aliases such as
+# screenroom.app, which a string-prefix check would miss.
+OUTPUT_ANCESTOR="$DIST_DIR"
+while [[ "$OUTPUT_ANCESTOR" != / ]]; do
+    if [[ "$OUTPUT_ANCESTOR" -ef "$APP_PATH" ]]; then
         printf '%s\n' 'Output directory must be outside the app bundle.' >&2
         exit 1
-        ;;
-esac
+    fi
+    OUTPUT_ANCESTOR="$(dirname "$OUTPUT_ANCESTOR")"
+done
 mkdir -p "$DIST_DIR"
 
 ARCHIVE_NAME="Screenroom-$VERSION-macos-$ARCH.zip"

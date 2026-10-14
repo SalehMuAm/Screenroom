@@ -54,4 +54,63 @@ final class CaptureLibraryTests: XCTestCase {
         XCTAssertTrue(library.items.isEmpty)
         XCTAssertNotNil(library.persistenceError)
     }
+
+    @MainActor
+    func testAddingAfterCorruptIndexPreservesOriginalBytesInOneBackup() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let index = root.appendingPathComponent("library.json")
+        let original = Data("[{\"url\":\"a recoverable old path\",\"kind\":\"unknown\"}]".utf8)
+        try original.write(to: index)
+        let library = CaptureLibrary(rootDirectory: root)
+
+        let first = library.add(url: root.appendingPathComponent("first.png"), kind: .screenshot)
+        let second = library.add(url: root.appendingPathComponent("second.png"), kind: .screenshot)
+
+        let backups = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("library-unreadable-") }
+        XCTAssertEqual(backups.count, 1)
+        let backup = try XCTUnwrap(backups.first)
+        XCTAssertEqual(try Data(contentsOf: backup), original)
+        let recoveryMessage = try XCTUnwrap(library.persistenceError)
+        // Enumeration may return /private/var while the caller supplied /var.
+        // Verify the reported path through the original root actually opens the backup.
+        let expectedBackup = root.appendingPathComponent(backup.lastPathComponent)
+        XCTAssertTrue(recoveryMessage.contains(expectedBackup.path), "Expected path \(expectedBackup.path) in: \(recoveryMessage)")
+        XCTAssertEqual(try Data(contentsOf: expectedBackup), original)
+        XCTAssertEqual(CaptureLibrary(rootDirectory: root).items, [second, first])
+    }
+
+    @MainActor
+    func testBackupFailureDoesNotOverwriteUnreadableIndexAndCanRetry() throws {
+        let files = FileManager.default
+        let root = files.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let index = root.appendingPathComponent("library.json")
+        defer {
+            try? files.setAttributes([.posixPermissions: 0o600], ofItemAtPath: index.path)
+            try? files.removeItem(at: root)
+        }
+        try files.createDirectory(at: root, withIntermediateDirectories: true)
+        let original = Data("unreadable library contents".utf8)
+        try original.write(to: index)
+        try files.setAttributes([.posixPermissions: 0o000], ofItemAtPath: index.path)
+        guard !files.isReadableFile(atPath: index.path) else {
+            throw XCTSkip("This environment can read files despite their POSIX permissions.")
+        }
+        let library = CaptureLibrary(rootDirectory: root)
+
+        let first = library.add(url: root.appendingPathComponent("first.png"), kind: .screenshot)
+
+        XCTAssertTrue(try XCTUnwrap(library.persistenceError).contains("could not be backed up"))
+        XCTAssertTrue(try XCTUnwrap(library.persistenceError).contains(index.path))
+        try files.setAttributes([.posixPermissions: 0o600], ofItemAtPath: index.path)
+        XCTAssertEqual(try Data(contentsOf: index), original)
+
+        let second = library.add(url: root.appendingPathComponent("second.png"), kind: .screenshot)
+        let backups = try files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("library-unreadable-") }
+        XCTAssertTrue(backups.contains { (try? Data(contentsOf: $0)) == original })
+        XCTAssertEqual(CaptureLibrary(rootDirectory: root).items, [second, first])
+    }
 }

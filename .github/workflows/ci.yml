@@ -34,10 +34,13 @@ jobs:
 
       - name: Check scripts and app metadata
         run: |
-          for script in scripts/*.sh; do
+          for script in scripts/*.sh scripts/tests/*.sh; do
             bash -n "$script"
           done
           plutil -lint Resources/Info.plist
+
+      - name: Test install and release scripts
+        run: ./scripts/tests/shell-regressions.sh
 
       - name: Run release tests
         run: xcrun swift test --configuration release --disable-sandbox
