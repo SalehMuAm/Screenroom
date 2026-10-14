@@ -9,6 +9,7 @@
 - Back up unreadable library indexes before replacing them; leave the original intact if backup fails.
 - Validate build/run options before taking action, and support `--help` without installing anything.
 - Reject release output inside the app even through case or symlink aliases on macOS.
+- Remove local debug-map paths from release bundles before signing.
 - Add regression coverage for editor preservation, library recovery, and release scripts.
 
 ### Preview limitations

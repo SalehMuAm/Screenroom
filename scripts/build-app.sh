@@ -54,6 +54,12 @@ trap 'rm -rf "$STAGING_DIR"' EXIT
 STAGED_APP="$STAGING_DIR/Screenroom.app"
 mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources"
 cp "$BIN_DIR/Screenroom" "$STAGED_APP/Contents/MacOS/Screenroom"
+# SwiftPM release executables retain debug-map paths to local object files.
+# Strip only debug symbols from the bundled copy before signing; keep the
+# original build products and all runtime symbols for local debugging.
+if [[ "$CONFIGURATION" == release ]]; then
+    xcrun strip -S "$STAGED_APP/Contents/MacOS/Screenroom"
+fi
 cp "$ROOT/Resources/Info.plist" "$STAGED_APP/Contents/Info.plist"
 cp "$BUILD_DIR/assets/Screenroom.icns" "$STAGED_APP/Contents/Resources/Screenroom.icns"
 cp "$ROOT/LICENSE" "$STAGED_APP/Contents/Resources/LICENSE"

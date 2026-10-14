@@ -55,6 +55,7 @@ jobs:
           codesign --verify --strict dist/Screenroom.app
           test "$(plutil -extract CFBundleIdentifier raw dist/Screenroom.app/Contents/Info.plist)" = "app.screenroom.Screenroom"
           test -x dist/Screenroom.app/Contents/MacOS/Screenroom
+          python3 -c 'import os, pathlib; assert os.fsencode(os.environ["GITHUB_WORKSPACE"]) not in pathlib.Path("dist/Screenroom.app/Contents/MacOS/Screenroom").read_bytes(), "Local build paths found in release executable"'
           ./scripts/package-release.sh
           cd dist
           shasum -a 256 -c Screenroom-*.zip.sha256
