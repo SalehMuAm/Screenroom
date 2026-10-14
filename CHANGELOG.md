@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep capture selection over the active app and return focus before screenshots and recordings started from Screenroom.
+- Handle cancellation and failed focus restoration before recording starts.
 - Keep an open screenshot editor and its unsaved annotations when a recording finishes.
 - Preserve unsaved-change tracking when reopening the same image.
 - Back up unreadable library indexes before replacing them; leave the original intact if backup fails.

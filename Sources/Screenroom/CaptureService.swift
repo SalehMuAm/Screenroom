@@ -87,7 +87,8 @@ final class CaptureService: NSObject, ObservableObject {
         return url
     }
 
-    func startRecording(source: CaptureSource, capturesSystemAudio: Bool, framesPerSecond: Int, destination: URL) {
+    func startRecording(source: CaptureSource, capturesSystemAudio: Bool, framesPerSecond: Int, destination: URL,
+                        prepare: @escaping @MainActor () async throws -> Void = {}) {
         guard !isBusy else { return }
         // Resolve the display at invocation, before the pointer can move during startup.
         let targetScreen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
@@ -96,6 +97,11 @@ final class CaptureService: NSObject, ObservableObject {
         captureTask = Task { [weak self] in
             guard let self else { return }
             do {
+                // Reserve the operation before returning focus to the captured app.
+                // A second shortcut must cancel this preparation, not start another stream.
+                try await prepare()
+                try Task.checkCancellation()
+                guard operationID == token else { return }
                 guard let selection = try await selectContent(source: source, token: token,
                                                               directDisplay: source == .display, displayID: displayID) else {
                     if operationID == token { reset() }
@@ -453,15 +459,18 @@ private final class RegionSelector {
             await withCheckedContinuation { continuation in
                 guard !Task.isCancelled else { continuation.resume(returning: nil); return }
                 self.continuation = continuation
-                NSApp.activate(ignoringOtherApps: true)
                 for screen in NSScreen.screens {
                     guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { continue }
-                    let window = RegionOverlayWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+                    // Taking app focus here switches away from a browser's full-screen
+                    // Space (or Stage Manager set) before ScreenCaptureKit sees it.
+                    let window = RegionOverlayWindow(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
                     window.backgroundColor = .clear
                     window.isOpaque = false
                     window.hasShadow = false
+                    window.hidesOnDeactivate = false
+                    window.animationBehavior = .none
                     window.level = .screenSaver
-                    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+                    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .canJoinAllApplications]
                     window.isReleasedWhenClosed = false
                     let view = RegionSelectionView(frame: CGRect(origin: .zero, size: screen.frame.size))
                     view.onSelection = { [weak self] rect in
@@ -497,7 +506,7 @@ private final class RegionSelector {
     }
 }
 
-private final class RegionOverlayWindow: NSWindow {
+private final class RegionOverlayWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
@@ -508,6 +517,7 @@ private final class RegionSelectionView: NSView {
     private var anchor: NSPoint?
     private var selectedRect: NSRect?
     override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
 

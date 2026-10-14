@@ -95,6 +95,7 @@ For capture or lifecycle changes, check the affected flows manually:
 - Start a full-display recording with **⌘⇧7**, let it run beyond a few seconds, then stop with the same physical shortcut. Confirm the saved duration, framing, and playback. Also try the capture button and menu bar controls.
 - Record with **System audio** on while another app plays sound, and listen to the saved file. Repeat with it off. The preview's audio-track label alone does not prove audible audio was captured.
 - Select Area and Window; test cancellation, permission denial, and repeated start/stop without a crash or a leftover recording session.
+- Capture a test webpage from a normal browser window, a full-screen browser on another Space, and with Stage Manager enabled. Try area screenshots and display/area recordings from the shortcut, menu bar, and main window. The browser must remain visible during selection and capture; Escape must cancel area selection, and a second recording shortcut must cancel preparation.
 - For screenshot/editor changes, draw and move annotations, undo/redo, copy/export, and verify the unsaved-edit prompts protect your work.
 - If recording is interrupted, verify the app reports the reason and keeps any finalized file. Do not fill your disk deliberately to simulate low storage; test the storage policy with unit tests.
 

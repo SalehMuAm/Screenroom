@@ -27,6 +27,7 @@ final class AppModel: ObservableObject {
     weak var mainWindow: NSWindow?
     private var subscriptions: Set<AnyCancellable> = []
     private var hotKeys: HotKeyManager?
+    private let capturePresentation = CapturePresentation()
 
     init(library: CaptureLibrary? = nil, registerHotKeys: Bool = true) {
         self.library = library ?? CaptureLibrary()
@@ -111,14 +112,13 @@ final class AppModel: ObservableObject {
         errorMessage = nil
         notice = nil
         isTakingScreenshot = true
-        mainWindow?.orderOut(nil)
         Task {
             defer {
                 isTakingScreenshot = false
                 showMainWindow()
             }
             do {
-                try await Task.sleep(for: .milliseconds(200))
+                try await capturePresentation.prepareForCapture(hiding: mainWindow)
                 if let url = try await capture.takeScreenshot(source: chosenSource) {
                     let item = try library.storeScreenshot(from: url)
                     try? FileManager.default.removeItem(at: url)
@@ -145,9 +145,10 @@ final class AppModel: ObservableObject {
             let destination = try library.newDestination(for: .recording)
             refreshRecordingStorage()
             try recordingStorage.validateForRecording()
-            mainWindow?.orderOut(nil)
             capture.startRecording(source: chosenSource, capturesSystemAudio: systemAudio,
-                                   framesPerSecond: framesPerSecond, destination: destination)
+                                   framesPerSecond: framesPerSecond, destination: destination) { [self] in
+                try await capturePresentation.prepareForCapture(hiding: mainWindow)
+            }
         } catch {
             errorMessage = error.localizedDescription
             showMainWindow()
