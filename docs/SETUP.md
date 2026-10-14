@@ -8,16 +8,17 @@ Xcode is not needed to run a downloaded app. A source build uses your Mac's arch
 
 The **1.0.4 preview is for Apple silicon (arm64), macOS 15 or later**. It is ad-hoc signed and **not notarized**. It does not yet provide the normal installation experience of a Developer ID signed, notarized Mac app. Intel users should build from source; no Intel prebuilt app is provided.
 
-1. Download `Screenroom-1.0.4-macos-arm64.zip` and `Screenroom-1.0.4-macos-arm64.zip.sha256` from the [v1.0.4 release](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.4).
-2. Put both files in the same folder. In Terminal, from that folder, verify the ZIP against the published checksum:
+1. Download the [Screenroom 1.0.4 ZIP](https://github.com/SalehMuAm/Screenroom/releases/download/v1.0.4/Screenroom-1.0.4-macos-arm64.zip) and its [SHA-256 checksum](https://github.com/SalehMuAm/Screenroom/releases/download/v1.0.4/Screenroom-1.0.4-macos-arm64.zip.sha256). The [release notes](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.4) describe this preview's changes and limitations.
+2. Save both files in **Downloads**, keeping their original names. Open Terminal and verify the ZIP against the published checksum:
 
-```sh
-shasum -a 256 -c Screenroom-1.0.4-macos-arm64.zip.sha256
-```
+   ```sh
+   cd "$HOME/Downloads"
+   shasum -a 256 -c Screenroom-1.0.4-macos-arm64.zip.sha256
+   ```
 
-3. Check that verification reports `OK`. Expand the ZIP, quit any running Screenroom, and move `Screenroom.app` into **Applications** before opening it.
+3. Check that verification reports `Screenroom-1.0.4-macos-arm64.zip: OK`. If it fails, do not install that download; download both files again. Expand the ZIP, quit any running Screenroom, and move `Screenroom.app` into **Applications** before opening it.
 4. macOS may block the first launch because this preview is not notarized. If you trust this source and verified the download, use the app-specific **Open Anyway** option in **System Settings → Privacy & Security** when available, following [Apple's instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper globally. If this route is unavailable, build from source below instead.
-5. Follow [Grant capture access](#5-grant-capture-access) below. Updating to a different ad-hoc build may require capture permission again.
+5. Follow [Grant capture access](#grant-capture-access), then try your [first screenshot](#first-screenshot) or [first recording](#first-recording). Updating to a different ad-hoc build may require capture permission again.
 
 The checksum checks the downloaded file against the release; it does not substitute for Apple's notarization. For ongoing source development, a stable local Apple Development certificate is recommended.
 
@@ -115,7 +116,9 @@ Keep using the same destination for later updates. Do not run the build script w
 
 For subsequent builds, `./scripts/run.sh` builds, installs, and opens the app in one command. `./scripts/run.sh --no-build` only opens the installed copy. Pass `SCREENROOM_INSTALL_DIR` again if using a custom destination. `CONFIGURATION=debug ./scripts/build-app.sh` creates a debug bundle.
 
-### 5. Grant capture access
+<a id="5-grant-capture-access"></a>
+
+## Grant capture access
 
 Start a capture, then follow the macOS permission prompt. In **System Settings → Privacy & Security → Screen & System Audio Recording**, enable the installed Screenroom app. Quit and reopen it if macOS asks. On macOS versions with different wording, look for **Screen Recording**.
 
@@ -128,9 +131,43 @@ If permission seems stuck:
 3. Enable it and reopen that same copy. Avoid launching `dist/Screenroom.app` or the raw `.build` executable for everyday use.
 4. If the problem started after rebuilding, check that you used the same certificate. An ad-hoc build or a different signing identity may need fresh authorization.
 
+## First screenshot
+
+1. Open Screenroom. Under **Screenshot**, choose **Area** (the default on a fresh installation).
+2. Switch to the browser or other app you want to capture and leave the desired page visible.
+3. Press **⌘⇧6**, then drag to select the area. Press **Escape** to cancel the selection.
+4. The PNG is saved to `~/Pictures/Screenroom/` and opens in Screenroom for annotation. Export or copy the edited image to preserve any annotations; the original screenshot remains saved.
+
+Screenroom must be running for its global shortcuts to work. Choose **Window** or **Screen** under **Screenshot** for other capture targets. Screenshot and recording targets are remembered separately.
+
 ## First recording
 
-Open Screenroom and choose **Recording**. It defaults to the entire display under your pointer. Choose **Area** or **Window** if you want a selection step; screenshot and recording targets are remembered separately. Press **⌘⇧7** once to start and again to stop and save. Screenroom must be running for its global shortcuts to work.
+1. Open Screenroom and choose **Recording**. It defaults to the entire display under your pointer. Choose **Area** or **Window** if you want a selection step.
+2. Turn **System audio** on if you want to capture software audio; it is off on a fresh installation. Microphone audio is never recorded.
+3. Switch to the browser or app you want to record. For a full-display recording, place the pointer on the display you want to capture.
+4. Press **⌘⇧7** to start, then press it again to stop and save. Wait for saving to finish. The MP4 is saved to `~/Movies/Screenroom/`.
+
+## Update Screenroom
+
+### Downloaded app
+
+1. Check [Releases](https://github.com/SalehMuAm/Screenroom/releases) for a newer version and read its requirements and release notes.
+2. Download its ZIP and matching checksum, then verify them using the instructions for that version.
+3. Stop any active recording, wait for saving to finish, and export unsaved screenshot annotations. Choose **Screenroom → Quit Screenroom**; closing its window leaves it running in the menu bar.
+4. Expand the new ZIP and replace `Screenroom.app` in the same Applications folder used for the previous version. Open that installed copy.
+5. Follow [Grant capture access](#grant-capture-access) again if macOS requests permission. Different ad-hoc builds can require fresh authorization.
+
+Replacing the app preserves saved captures and the library index, which live outside the app bundle. Keep using one installation destination to avoid confusing capture permissions between copies.
+
+### Source installation
+
+If your checkout has no local changes, run the following from the repository folder:
+
+```sh
+git pull --ff-only
+```
+
+Stop recording, export unsaved annotations, and quit Screenroom. Repeat the [build and install steps](#4-build-install-and-open) with the same signing identity and installation destination. Source updates follow the repository branch; to use a packaged release instead, follow the downloaded-app instructions above.
 
 ## Troubleshooting
 
@@ -143,6 +180,8 @@ Open Screenroom and choose **Recording**. It defaults to the entire display unde
 | Cannot quit or install an update | Stop the active recording and let saving finish. Export unsaved screenshot annotations, then choose **Screenroom → Quit Screenroom** or press **⌘Q**. |
 | Compiler cannot find an API | Check that your selected macOS SDK is 15 or later and that the selected Swift compiler is from a compatible Xcode installation. |
 
+## Saved files and uninstalling
+
 Saved files stay on your Mac:
 
 - Screenshots: `~/Pictures/Screenroom/`
@@ -151,4 +190,4 @@ Saved files stay on your Mac:
 
 Annotations must be exported or copied to preserve the edited image. The original screenshot stays saved. Removing an entry from the library does not delete its media file.
 
-To update a source installation with no local changes, run `git pull --ff-only`, quit Screenroom, and run the build/install steps again with the same signing identity. To uninstall, quit and move the installed app to the Trash; your saved captures remain in the folders above.
+To uninstall, stop recording, save any edits, quit Screenroom, and move the installed app to the Trash. Your saved captures and library index remain in the folders above. If you also want to remove that data, back up any captures you want to keep before deleting `~/Pictures/Screenroom/`, `~/Movies/Screenroom/`, and `~/Library/Application Support/Screenroom/` in Finder. You can also disable Screenroom's capture access in **System Settings → Privacy & Security → Screen & System Audio Recording**.

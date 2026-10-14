@@ -39,6 +39,7 @@ If you have your own commits on `main`, reconcile them deliberately rather than 
 | --- | --- |
 | `Sources/Screenroom/ScreenroomApp.swift` | App entry point, window lifecycle, menus, and menu bar controls. |
 | `Sources/Screenroom/AppModel.swift` | Coordinates capture, editing, library navigation, and persisted user options. |
+| `Sources/Screenroom/CapturePresentation.swift` | Returns focus to the app being captured and prepares window visibility. |
 | `Sources/Screenroom/CaptureService.swift` | ScreenCaptureKit selection, screenshots, system audio, recording, and delegate callbacks. |
 | `Sources/Screenroom/RecordingStreamLifecycle.swift` | Recording start/stop state and interruption handling. |
 | `Sources/Screenroom/ScreenCapturePermission.swift` | Capture authorization policy. |
