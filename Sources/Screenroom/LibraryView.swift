@@ -141,13 +141,14 @@ private struct CaptureCard: View {
 struct RecordingPreview: View {
     let item: CaptureItem
     @State private var player: AVPlayer?
+    @State private var hasAudioTrack: Bool?
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
                 Color(red: 0.12, green: 0.13, blue: 0.14)
                 if let player {
-                    VideoPlayer(player: player)
+                    RecordingPlayerView(player: player)
                         .padding(24)
                 } else { ProgressView().tint(.white) }
             }
@@ -156,6 +157,11 @@ struct RecordingPreview: View {
                     Text(item.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                     Text("Saved to \(item.url.deletingLastPathComponent().path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
+                    if let hasAudioTrack {
+                        Label(hasAudioTrack ? "Includes audio" : "No audio track",
+                              systemImage: hasAudioTrack ? "speaker.wave.2" : "speaker.slash")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Button("Open in QuickTime") { NSWorkspace.shared.open([item.url], withApplicationAt: URL(fileURLWithPath: "/System/Applications/QuickTime Player.app"), configuration: NSWorkspace.OpenConfiguration()) }
@@ -164,7 +170,42 @@ struct RecordingPreview: View {
                     .buttonStyle(.borderedProminent)
             }.padding(20).background(.white)
         }
-        .task(id: item.url) { player?.pause(); player = AVPlayer(url: item.url) }
+        .task(id: item.url) {
+            player?.pause()
+            player = AVPlayer(url: item.url)
+            hasAudioTrack = nil
+            if let tracks = try? await AVURLAsset(url: item.url).loadTracks(withMediaType: .audio),
+               !Task.isCancelled {
+                hasAudioTrack = !tracks.isEmpty
+            }
+        }
         .onDisappear { player?.pause(); player = nil }
+    }
+}
+
+/// Use AVKit's native view directly so playback does not depend on the SwiftUI
+/// VideoPlayer overlay resolving AVPlayerView's superclass metadata at runtime.
+private struct RecordingPlayerView: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.controlsStyle = .inline
+        view.showsFullScreenToggleButton = true
+        view.videoGravity = .resizeAspect
+        view.player = player
+        return view
+    }
+
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        if view.player !== player {
+            view.player?.pause()
+            view.player = player
+        }
+    }
+
+    static func dismantleNSView(_ view: AVPlayerView, coordinator: ()) {
+        view.player?.pause()
+        view.player = nil
     }
 }

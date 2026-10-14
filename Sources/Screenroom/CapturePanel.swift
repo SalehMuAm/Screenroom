@@ -35,6 +35,10 @@ struct CapturePanel: View {
                                 sourceButton(source)
                             }
                         }
+                        if model.mode == .recording && model.source == .display {
+                            Text("Starts immediately on the display under your pointer. Press ⇧⌘7 again to stop.")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
                     }
 
                     if model.mode == .recording {
@@ -43,8 +47,12 @@ struct CapturePanel: View {
                                 .font(.system(size: 19)).frame(width: 28)
                                 .foregroundStyle(ScreenroomStyle.accent)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("System audio").font(.system(size: 13, weight: .semibold))
-                                Text("Capture app sounds. Microphone stays off.").font(.system(size: 11)).foregroundStyle(.secondary)
+                                Text(model.systemAudio ? "System audio is on" : "System audio is off")
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text(model.systemAudio
+                                     ? "App sounds will be recorded. Microphone stays off."
+                                     : "This recording will be silent. Turn on to include app sounds.")
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Toggle("System audio", isOn: $model.systemAudio).labelsHidden().toggleStyle(.switch)
@@ -84,6 +92,11 @@ struct CapturePanel: View {
                         Text(model.mode == .screenshot ? "PNG · Original resolution" : "MP4 · Up to 4K · \(model.framesPerSecond) fps")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                     }
+                    if model.mode == .recording, let warning = model.recordingStorage.warning {
+                        Label(warning, systemImage: "externaldrive.badge.exclamationmark")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(24)
                 .background(.white, in: RoundedRectangle(cornerRadius: 16))
@@ -102,6 +115,7 @@ struct CapturePanel: View {
             .padding(32)
             .frame(maxWidth: .infinity)
         }
+        .onAppear { model.refreshRecordingStorage() }
     }
 
     private func sourceButton(_ source: CaptureSource) -> some View {

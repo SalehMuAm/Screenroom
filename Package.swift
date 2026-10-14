@@ -10,7 +10,9 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Screenroom",
-            path: "Sources/Screenroom"
+            path: "Sources/Screenroom",
+            // Keep AVPlayerView's Objective-C runtime class loaded for playback.
+            linkerSettings: [.linkedFramework("AVKit")]
         ),
         .testTarget(
             name: "ScreenroomTests",

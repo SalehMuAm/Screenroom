@@ -23,11 +23,8 @@ struct ScreenroomApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Screenshot") { model.takeScreenshot() }
                     .disabled(model.busy)
-                Button(model.isRecording ? "Stop Recording" : "New Recording") {
-                    if model.isRecording { model.capture.stopRecording() }
-                    else { model.startRecording() }
-                }
-                .disabled(model.busy && !model.isRecording)
+                Button(model.isRecording ? "Stop Recording" : "New Recording") { model.toggleRecording() }
+                    .disabled(model.isTakingScreenshot || model.capture.state == .stopping)
                 Divider()
                 Button("Open Image…") { model.openImage() }
                     .keyboardShortcut("o", modifiers: .command)
@@ -72,7 +69,7 @@ private struct MenuBarContent: View {
     var body: some View {
         if model.isRecording {
             Text("Recording in progress")
-            Button("Stop & Save Recording") { model.capture.stopRecording() }
+            Button("Stop & Save Recording    ⇧⌘7") { model.toggleRecording() }
             Divider()
         } else if model.capture.isBusy {
             Text(model.capture.state == .stopping ? "Saving recording…" : "Preparing capture…")

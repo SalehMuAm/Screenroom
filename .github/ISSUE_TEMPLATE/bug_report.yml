@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a crash, capture problem, or unexpected behavior.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues first. Remove personal information from logs and use a harmless sample screen or recording when sharing attachments.
+  - type: input
+    id: version
+    attributes:
+      label: Screenroom version
+      description: Find this in Screenroom → About Screenroom. For a source build, include the commit.
+      placeholder: 1.0.3
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: macOS version and Mac chip
+      placeholder: macOS 15.7, Apple M2
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation
+      options:
+        - Built from source with an Apple signing certificate
+        - Built from source with ad-hoc signing
+        - Downloaded release
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include capture mode (Screen, Area, or Window), whether system audio was enabled, and whether you used the shortcut or button.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant diagnostics
+      description: For crashes, attach the Screenroom crash report from Console. For recordings that stop early, include available disk space and any error shown. Review reports for personal paths before sharing.

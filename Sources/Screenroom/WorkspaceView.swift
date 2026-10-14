@@ -41,10 +41,14 @@ struct WorkspaceView: View {
             set: { if !$0 { model.errorMessage = nil; model.library.persistenceError = nil } }
         )) {
             Button("OK", role: .cancel) { model.errorMessage = nil; model.library.persistenceError = nil }
-            if model.errorMessage?.contains("Privacy") == true {
+            if model.errorMessage != nil && model.capture.needsPermissionHelp {
                 Button("Open Screen Recording Settings") {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                     model.errorMessage = nil
+                }
+                Button("Quit Screenroom") {
+                    model.errorMessage = nil
+                    NSApp.terminate(nil)
                 }
             }
         } message: {

@@ -11,12 +11,17 @@ final class AppModel: ObservableObject {
     @Published var page: WorkspacePage = .capture
     @Published var selectedItem: CaptureItem?
     @Published var mode: CaptureKind = .screenshot
-    @Published var source: CaptureSource = .region
+    @Published private var sourcePreferences = CaptureSourcePreferences()
+    var source: CaptureSource {
+        get { sourcePreferences.source(for: mode) }
+        set { sourcePreferences.select(newValue, for: mode) }
+    }
     @Published var errorMessage: String?
     @Published var notice: String?
     @Published var isTakingScreenshot = false
     @Published var showingSettings = false
     @Published var editorIsDirty = false
+    @Published private(set) var recordingStorage = RecordingStorage(availableBytes: nil)
     @AppStorage("systemAudio") var systemAudio = false
     @AppStorage("framesPerSecond") var framesPerSecond = 30
     weak var mainWindow: NSWindow?
@@ -24,6 +29,7 @@ final class AppModel: ObservableObject {
     private var hotKeys: HotKeyManager?
 
     init() {
+        refreshRecordingStorage()
         capture.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &subscriptions)
@@ -34,6 +40,9 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self, !self.capture.isBusy else { return }
                 self.errorMessage = message
+                if self.selectedItem?.kind == .recording {
+                    self.notice = "Recording ended early · video saved"
+                }
                 self.showMainWindow()
             }
         }.store(in: &subscriptions)
@@ -41,6 +50,10 @@ final class AppModel: ObservableObject {
             if state == .idle {
                 Task { @MainActor in
                     guard let self, self.capture.state == .idle, !self.isTakingScreenshot else { return }
+                    // Errors can arrive while the video is still being finalized.
+                    // Surface them once idle instead of silently reporting success.
+                    if let message = self.capture.errorMessage { self.errorMessage = message }
+                    self.refreshRecordingStorage()
                     self.showMainWindow()
                 }
             }
@@ -50,15 +63,13 @@ final class AppModel: ObservableObject {
             let item = self.library.add(url: url, kind: .recording)
             self.selectedItem = item
             self.page = .library
-            self.notice = "Recording saved"
+            self.notice = self.capture.errorMessage == nil ? "Recording saved" : "Recording ended early · video saved"
             self.showMainWindow()
         }
         hotKeys = HotKeyManager(onScreenshot: { [weak self] in
             self?.takeScreenshot()
         }, onRecording: { [weak self] in
-            guard let self else { return }
-            if self.capture.state == .recording { self.capture.stopRecording() }
-            else if !self.busy { self.startRecording() }
+            self?.toggleRecording()
         })
     }
 
@@ -84,12 +95,14 @@ final class AppModel: ObservableObject {
 
     func takeScreenshot() {
         guard !busy, mainWindow?.attachedSheet == nil, NSApp.modalWindow == nil, confirmLeavingEditor() else { return }
+        let chosenSource = sourcePreferences.screenshot
+        guard verifyCaptureAccess(for: chosenSource) else { return }
+        mode = .screenshot
         editorIsDirty = false
         selectedItem = nil
         errorMessage = nil
         notice = nil
         isTakingScreenshot = true
-        let chosenSource = source
         mainWindow?.orderOut(nil)
         Task {
             defer {
@@ -113,18 +126,39 @@ final class AppModel: ObservableObject {
 
     func startRecording() {
         guard !busy, mainWindow?.attachedSheet == nil, NSApp.modalWindow == nil, confirmLeavingEditor() else { return }
+        let chosenSource = sourcePreferences.recording
+        guard verifyCaptureAccess(for: chosenSource, directDisplay: chosenSource == .display) else { return }
+        mode = .recording
         editorIsDirty = false
         selectedItem = nil
         errorMessage = nil
         notice = nil
         do {
             let destination = try library.newDestination(for: .recording)
+            refreshRecordingStorage()
+            try recordingStorage.validateForRecording()
             mainWindow?.orderOut(nil)
-            capture.startRecording(source: source, capturesSystemAudio: systemAudio,
+            capture.startRecording(source: chosenSource, capturesSystemAudio: systemAudio,
                                    framesPerSecond: framesPerSecond, destination: destination)
         } catch {
             errorMessage = error.localizedDescription
             showMainWindow()
+        }
+    }
+
+    func toggleRecording() {
+        guard !isTakingScreenshot else { return }
+        switch capture.state {
+        case .idle: startRecording()
+        case .choosing: capture.cancelSelection()
+        case .starting, .recording: capture.stopRecording()
+        case .stopping: break
+        }
+    }
+
+    func refreshRecordingStorage() {
+        if let folder = try? library.directory(for: .recording) {
+            recordingStorage = RecordingStorage.inspect(folder: folder)
         }
     }
 
@@ -139,6 +173,19 @@ final class AppModel: ObservableObject {
         editorIsDirty = false
         selectedItem = library.add(url: url, kind: .screenshot)
         page = .library
+    }
+
+    private func verifyCaptureAccess(for source: CaptureSource, directDisplay: Bool = false) -> Bool {
+        do {
+            // Request while the main window is visible; keep the current editor
+            // intact if macOS needs the user to grant access or relaunch first.
+            try capture.ensurePermission(for: source, directDisplay: directDisplay)
+            return true
+        } catch {
+            errorMessage = capture.friendlyMessage(error)
+            showMainWindow()
+            return false
+        }
     }
 
     func revealFolder(for kind: CaptureKind) {

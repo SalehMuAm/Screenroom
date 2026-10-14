@@ -29,27 +29,39 @@ private enum CaptureError: LocalizedError {
 final class CaptureService: NSObject, ObservableObject {
     @Published private(set) var state: CaptureState = .idle
     @Published private(set) var startedAt: Date?
+    @Published private(set) var needsPermissionHelp = false
     @Published var errorMessage: String?
     var onRecordingFinished: ((URL) -> Void)?
     var isBusy: Bool { state != .idle }
 
     private var stream: SCStream?
     private var recordingOutput: SCRecordingOutput?
+    private var streamOutput: RecordingStreamOutput?
+    private var streamLifecycle: RecordingStreamLifecycle?
     private var recordingURL: URL?
-    private var captureStarted = false
-    private var stopRequested = false
-    private var stopIssued = false
+    private var recentlyFinishedStreamID: ObjectIdentifier?
     private var operationID = UUID()
     private var captureTask: Task<Void, Never>?
     private var transitionTimeout: Task<Void, Never>?
     private var pickerContinuation: CheckedContinuation<SCContentFilter?, Error>?
     private var regionSelector: RegionSelector?
     private var pickerObserver: CapturePickerObserver?
+    private let permission = ScreenCapturePermission()
 
     private struct Selection {
         let filter: SCContentFilter
         var sourceRect: CGRect?
         var size: CGSize { sourceRect?.size ?? filter.contentRect.size }
+    }
+
+    func ensurePermission(for source: CaptureSource, directDisplay: Bool = false) throws {
+        needsPermissionHelp = false
+        do {
+            try permission.ensure(for: source, directDisplay: directDisplay)
+        } catch {
+            needsPermissionHelp = true
+            throw error
+        }
     }
 
     func takeScreenshot(source: CaptureSource) async throws -> URL? {
@@ -77,11 +89,15 @@ final class CaptureService: NSObject, ObservableObject {
 
     func startRecording(source: CaptureSource, capturesSystemAudio: Bool, framesPerSecond: Int, destination: URL) {
         guard !isBusy else { return }
+        // Resolve the display at invocation, before the pointer can move during startup.
+        let targetScreen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+        let displayID = (targetScreen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
         let token = beginOperation()
         captureTask = Task { [weak self] in
             guard let self else { return }
             do {
-                guard let selection = try await selectContent(source: source, token: token) else {
+                guard let selection = try await selectContent(source: source, token: token,
+                                                              directDisplay: source == .display, displayID: displayID) else {
                     if operationID == token { reset() }
                     return
                 }
@@ -89,6 +105,7 @@ final class CaptureService: NSObject, ObservableObject {
                 guard operationID == token else { return }
                 guard !FileManager.default.fileExists(atPath: destination.path) else { throw CaptureError.fileExists }
                 try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try RecordingStorage.inspect(folder: destination.deletingLastPathComponent()).validateForRecording()
                 state = .starting
                 let config = configuration(for: selection, recording: true)
                 config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(min(60, max(15, framesPerSecond))))
@@ -103,25 +120,39 @@ final class CaptureService: NSObject, ObservableObject {
                 outputConfig.outputFileType = .mp4
                 let output = SCRecordingOutput(configuration: outputConfig, delegate: self)
                 let newStream = SCStream(filter: selection.filter, configuration: config, delegate: self)
+                let sampleOutput = RecordingStreamOutput()
+                let lifecycle = RecordingStreamLifecycle()
                 recordingURL = destination
                 recordingOutput = output
+                streamOutput = sampleOutput
+                streamLifecycle = lifecycle
                 stream = newStream
+                // SCRecordingOutput writes the file. Drain the sample callbacks too so
+                // ScreenCaptureKit does not report a missing stream output for every frame.
+                try newStream.addStreamOutput(sampleOutput, type: .screen, sampleHandlerQueue: sampleOutput.queue)
+                if capturesSystemAudio {
+                    try newStream.addStreamOutput(sampleOutput, type: .audio, sampleHandlerQueue: sampleOutput.queue)
+                }
                 try newStream.addRecordingOutput(output)
                 armTransitionTimeout(for: token)
                 try await newStream.startCapture()
-                guard operationID == token else { try? await newStream.stopCapture(); return }
-                captureStarted = true
-                if stopRequested { stopActiveStream() }
+                lifecycle.didStart()
+                guard operationID == token else {
+                    if lifecycle.beginStop() { try? await newStream.stopCapture() }
+                    return
+                }
+                if lifecycle.stopRequested { stopActiveStream() }
             } catch is CancellationError {
                 if operationID == token, stream == nil { reset() }
             } catch {
                 guard operationID == token else { return }
                 errorMessage = friendlyMessage(error)
                 let failedStream = stream
+                let shouldStop = streamLifecycle?.beginStop() ?? false
                 // Delegate callbacks can run while stopCapture suspends. Retire this operation
                 // first so a late cleanup can never reset a subsequent capture.
                 reset()
-                if let failedStream { try? await failedStream.stopCapture() }
+                if shouldStop, let failedStream { try? await failedStream.stopCapture() }
             }
         }
     }
@@ -129,20 +160,20 @@ final class CaptureService: NSObject, ObservableObject {
     func stopRecording() {
         if state == .choosing { cancelSelection(); return }
         guard state == .recording || state == .starting, stream != nil else { return }
-        stopRequested = true
+        streamLifecycle?.requestStop()
         state = .stopping
         armTransitionTimeout(for: operationID)
         // Starting and stopping the same SCStream concurrently can leave a capture running.
-        if captureStarted { stopActiveStream() }
+        stopActiveStream()
     }
 
     private func stopActiveStream() {
-        guard !stopIssued, let currentStream = stream else { return }
-        stopIssued = true
+        guard let currentStream = stream, let lifecycle = streamLifecycle, lifecycle.beginStop() else { return }
         let token = operationID
         Task { [weak self] in
             do {
                 try await currentStream.stopCapture()
+                lifecycle.didStop()
                 // The file is still being finalized. Only the recording delegate may publish it.
             } catch {
                 guard let self, operationID == token else { return }
@@ -162,15 +193,30 @@ final class CaptureService: NSObject, ObservableObject {
     }
 
     private func beginOperation() -> UUID {
+        recentlyFinishedStreamID = nil
         operationID = UUID()
         errorMessage = nil
+        needsPermissionHelp = false
         state = .choosing
         return operationID
     }
 
-    private func selectContent(source: CaptureSource, token: UUID) async throws -> Selection? {
+    private func selectContent(source: CaptureSource, token: UUID, directDisplay: Bool = false,
+                               displayID: CGDirectDisplayID? = nil) async throws -> Selection? {
+        try ensurePermission(for: source, directDisplay: directDisplay)
+        if source == .display && directDisplay {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            try Task.checkCancellation()
+            guard state == .choosing, operationID == token else { return nil }
+            guard let display = content.displays.first(where: { $0.displayID == displayID })
+                    ?? content.displays.first(where: { $0.displayID == CGMainDisplayID() })
+                    ?? content.displays.first else { throw CaptureError.noDisplay }
+            let ownApps = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+            let filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
+            filter.includeMenuBar = true
+            return Selection(filter: filter)
+        }
         if source == .region {
-            // Enumerating displays also asks macOS for Screen Recording access when needed.
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             try Task.checkCancellation()
             guard state == .choosing, operationID == token else { return nil }
@@ -257,8 +303,9 @@ final class CaptureService: NSObject, ObservableObject {
             guard let self, operationID == token, state == .starting || state == .stopping else { return }
             errorMessage = CaptureError.recordingTimedOut.localizedDescription
             let oldStream = stream
+            let shouldStop = streamLifecycle?.beginStop() ?? false
             reset()
-            if let oldStream { try? await oldStream.stopCapture() }
+            if shouldStop, let oldStream { try? await oldStream.stopCapture() }
         }
     }
 
@@ -268,10 +315,9 @@ final class CaptureService: NSObject, ObservableObject {
         captureTask = nil
         stream = nil
         recordingOutput = nil
+        streamOutput = nil
+        streamLifecycle = nil
         recordingURL = nil
-        captureStarted = false
-        stopRequested = false
-        stopIssued = false
         startedAt = nil
         operationID = UUID()
         if let pickerObserver {
@@ -283,9 +329,17 @@ final class CaptureService: NSObject, ObservableObject {
     }
 
     func friendlyMessage(_ error: Error) -> String {
+        if let permissionError = error as? ScreenCapturePermissionError {
+            needsPermissionHelp = true
+            return permissionError.localizedDescription
+        }
         let nsError = error as NSError
+        if nsError.domain == SCStreamErrorDomain && nsError.code == SCStreamError.Code.systemStoppedStream.rawValue {
+            return "macOS stopped the recording. Low disk space can cause this. Free up storage before recording again; any completed portion of the video has been kept."
+        }
         if nsError.domain == SCStreamErrorDomain && nsError.code == SCStreamError.Code.userDeclined.rawValue {
-            return "Allow Screenroom in System Settings → Privacy & Security → Screen & System Audio Recording, then try again. macOS may ask you to reopen the app."
+            needsPermissionHelp = true
+            return "macOS could not authorize this capture. Enable Screenroom in System Settings → Privacy & Security → Screen & System Audio Recording, then quit Screenroom and reopen it from Applications. If it is already enabled, quit and reopen Screenroom before trying again."
         }
         return error.localizedDescription
     }
@@ -325,13 +379,17 @@ extension CaptureService: SCRecordingOutputDelegate {
     nonisolated func recordingOutputDidFinishRecording(_ output: SCRecordingOutput) {
         Task { @MainActor [weak self] in
             guard let self, recordingOutput === output, let url = recordingURL else { return }
-            let oldStream = stream
+            // This app only finishes a file by stopping its stream. The file callback
+            // may arrive before a Control Center stop callback, so do not stop again.
+            streamLifecycle?.didStop()
+            let finishedStreamID = stream.map(ObjectIdentifier.init)
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             reset()
+            // File finalization can precede the system-stop error. Keep only its
+            // identity so a late error is surfaced without retaining capture buffers.
+            recentlyFinishedStreamID = finishedStreamID
             if size > 0 { onRecordingFinished?(url) }
             else { errorMessage = "The recording ended before a video could be saved. Try recording for a little longer." }
-            // A system stop can finish the file before the stream's stop callback arrives.
-            if let oldStream { try? await oldStream.stopCapture() }
         }
     }
 
@@ -340,8 +398,9 @@ extension CaptureService: SCRecordingOutputDelegate {
             guard let self, recordingOutput === output else { return }
             errorMessage = friendlyMessage(error)
             let oldStream = stream
+            let shouldStop = streamLifecycle?.beginStop() ?? false
             reset()
-            if let oldStream { try? await oldStream.stopCapture() }
+            if shouldStop, let oldStream { try? await oldStream.stopCapture() }
         }
     }
 }
@@ -349,9 +408,17 @@ extension CaptureService: SCRecordingOutputDelegate {
 extension CaptureService: SCStreamDelegate {
     nonisolated func stream(_ stoppedStream: SCStream, didStopWithError error: Error) {
         Task { @MainActor [weak self] in
-            guard let self, stream === stoppedStream else { return }
+            guard let self else { return }
             let nsError = error as NSError
-            if !(nsError.domain == SCStreamErrorDomain && nsError.code == SCStreamError.Code.userStopped.rawValue) {
+            let userStopped = nsError.domain == SCStreamErrorDomain && nsError.code == SCStreamError.Code.userStopped.rawValue
+            guard stream === stoppedStream else {
+                guard state == .idle, recentlyFinishedStreamID == ObjectIdentifier(stoppedStream) else { return }
+                recentlyFinishedStreamID = nil
+                if !userStopped { errorMessage = "Recording stopped: \(friendlyMessage(error))" }
+                return
+            }
+            streamLifecycle?.didStop()
+            if !userStopped {
                 errorMessage = "Recording stopped: \(friendlyMessage(error))"
             }
             state = .stopping
@@ -359,6 +426,14 @@ extension CaptureService: SCStreamDelegate {
             armTransitionTimeout(for: operationID)
         }
     }
+}
+
+/// ScreenCaptureKit still delivers raw samples alongside its file recording output.
+/// Release them immediately; the system owns encoding, audio muxing and file I/O.
+private final class RecordingStreamOutput: NSObject, SCStreamOutput {
+    let queue = DispatchQueue(label: "app.screenroom.recording-samples", qos: .userInitiated)
+
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {}
 }
 
 private struct SelectedRegion {

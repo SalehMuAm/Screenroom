@@ -1,0 +1,152 @@
+# Set up Screenroom
+
+Screenroom needs **macOS 15 or later**. Building from source also needs **Xcode 16 or later**, including its macOS SDK. The app uses only Apple frameworks; there are no package dependencies or audio drivers to install.
+
+Xcode is not needed to run a downloaded app. A source build uses your Mac's architecture; it does not create a universal binary.
+
+## Install the preview download
+
+The **1.0.3 preview is for Apple silicon (arm64), macOS 15 or later**. It is ad-hoc signed and **not notarized**. It does not yet provide the normal installation experience of a Developer ID signed, notarized Mac app. Intel users should build from source; no Intel prebuilt app is provided.
+
+1. Download `Screenroom-1.0.3-macos-arm64.zip` and `Screenroom-1.0.3-macos-arm64.zip.sha256` from the [v1.0.3 release](https://github.com/SalehMuAm/Screenroom/releases/tag/v1.0.3).
+2. Put both files in the same folder. In Terminal, from that folder, verify the ZIP against the published checksum:
+
+```sh
+shasum -a 256 -c Screenroom-1.0.3-macos-arm64.zip.sha256
+```
+
+3. Check that verification reports `OK`. Expand the ZIP, quit any running Screenroom, and move `Screenroom.app` into **Applications** before opening it.
+4. macOS may block the first launch because this preview is not notarized. If you trust this source and verified the download, use the app-specific **Open Anyway** option in **System Settings → Privacy & Security** when available, following [Apple's instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper globally. If this route is unavailable, build from source below instead.
+5. Follow [Grant capture access](#5-grant-capture-access) below. Updating to a different ad-hoc build may require capture permission again.
+
+The checksum checks the downloaded file against the release; it does not substitute for Apple's notarization. For ongoing source development, a stable local Apple Development certificate is recommended.
+
+## Build from source
+
+### 1. Prepare Xcode
+
+Install [Xcode](https://developer.apple.com/xcode/), open it once, and finish its first-launch setup. Check the selected tools in Terminal:
+
+```sh
+xcode-select --print-path
+xcrun swift --version
+xcrun --sdk macosx --show-sdk-version
+```
+
+The SDK must be version 15 or later. If the selected tools are older, choose the installed Xcode under **Xcode → Settings → Locations → Command Line Tools**. If Xcode is installed at the standard location, the equivalent command is:
+
+```sh
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+```
+
+See Apple's [command-line tools setup](https://developer.apple.com/documentation/xcode/configuring-command-line-tools-settings) for installations in other locations. A compatible Command Line Tools installation can build the package, but full Xcode also provides the certificate setup described below.
+
+### 2. Clone the source
+
+```sh
+git clone https://github.com/SalehMuAm/Screenroom.git
+cd Screenroom
+```
+
+To make changes in your own repository, start with the [fork workflow](../CONTRIBUTING.md#fork-and-build) instead.
+
+### 3. Choose how to sign your local app
+
+#### Recommended: a stable signing certificate
+
+Use the same certificate for successive builds so macOS can recognize the app when checking capture permissions.
+
+1. Open **Xcode → Settings → Accounts** (called **Apple Accounts** in some versions).
+2. Add your Apple Account, select the account/team, and open **Manage Certificates**.
+3. Use **+ → Apple Development** to create a development certificate if you do not already have one.
+4. Confirm the signing identity is available:
+
+```sh
+security find-identity -v -p codesigning
+```
+
+See Apple's [signing identity guide](https://developer.apple.com/documentation/xcode/sharing-your-teams-signing-certificates) if your account cannot create a certificate or its private key is missing. Keep the private key on your Mac; it does not belong in this repository.
+
+The build script automatically prefers a valid **Developer ID Application** identity, then **Apple Development**. To choose one explicitly, use its exact name or fingerprint from the command above:
+
+```sh
+SIGNING_IDENTITY="Apple Development: Your Name (IDENTIFIER)" ./scripts/build-app.sh
+```
+
+An Apple Development signature is for local development. It does not notarize the app or provide the normal Gatekeeper experience for public distribution.
+
+#### Temporary option: build without a certificate
+
+For a local trial without setting up a certificate:
+
+```sh
+SIGNING_IDENTITY=- ./scripts/build-app.sh
+```
+
+This explicitly selects ad-hoc signing. Changed builds can invalidate Screen Recording permission, so you may have to authorize the newly installed app again. Use a stable certificate for ongoing development. The script never silently falls back to ad-hoc signing.
+
+### 4. Build, install, and open
+
+If you have not already built the app in the previous step:
+
+```sh
+./scripts/build-app.sh
+```
+
+Then quit any running copy of Screenroom and install:
+
+```sh
+./scripts/install-app.sh --no-build
+open /Applications/Screenroom.app
+```
+
+The build produces `dist/Screenroom.app`. The installer verifies it, replaces only an existing Screenroom app at the destination, and registers the installed copy with macOS. It refuses to update a running app, protecting active recordings and unsaved edits. Always launch the installed copy after granting capture permission.
+
+If `/Applications` is not writable by your account, install just for your user:
+
+```sh
+SCREENROOM_INSTALL_DIR="$HOME/Applications" ./scripts/install-app.sh --no-build
+SCREENROOM_INSTALL_DIR="$HOME/Applications" ./scripts/run.sh --no-build
+```
+
+Keep using the same destination for later updates. Do not run the build script with `sudo`.
+
+For subsequent builds, `./scripts/run.sh` builds, installs, and opens the app in one command. `./scripts/run.sh --no-build` only opens the installed copy. Pass `SCREENROOM_INSTALL_DIR` again if using a custom destination. `CONFIGURATION=debug ./scripts/build-app.sh` creates a debug bundle.
+
+### 5. Grant capture access
+
+Start a capture, then follow the macOS permission prompt. In **System Settings → Privacy & Security → Screen & System Audio Recording**, enable the installed Screenroom app. Quit and reopen it if macOS asks. On macOS versions with different wording, look for **Screen Recording**.
+
+Area capture and immediate full-display recording need this access. Window capture uses Apple's content picker. Screenroom never requests microphone access, Accessibility access, or Input Monitoring access.
+
+If permission seems stuck:
+
+1. Stop any recording, save your edits, and quit Screenroom completely; closing its window leaves it running in the menu bar.
+2. Check that System Settings lists the installed copy. Use **+** to select `/Applications/Screenroom.app`, or the corresponding app in your user Applications folder.
+3. Enable it and reopen that same copy. Avoid launching `dist/Screenroom.app` or the raw `.build` executable for everyday use.
+4. If the problem started after rebuilding, check that you used the same certificate. An ad-hoc build or a different signing identity may need fresh authorization.
+
+## First recording
+
+Open Screenroom and choose **Recording**. It defaults to the entire display under your pointer. Choose **Area** or **Window** if you want a selection step; screenshot and recording targets are remembered separately. Press **⌘⇧7** once to start and again to stop and save. Screenroom must be running for its global shortcuts to work.
+
+## Troubleshooting
+
+| Problem | What to check |
+| --- | --- |
+| No software audio | Turn **System audio** on before recording; it is off on a fresh installation. Play audio in the software you are capturing. Window capture follows the selected content filter; full-display capture is a useful diagnostic. Screenroom excludes its own playback audio and always disables the microphone. |
+| Preview says “Includes audio,” but playback is silent | That label confirms an audio track exists, not that it contains sound. Check playback volume and verify the source was producing audio while recording. Protected media may not be capturable. |
+| Recording stops early | Read the saved recording's interruption message. Free disk space: Screenroom warns below 5 GiB and blocks starts below 1 GiB. macOS can interrupt recording under storage pressure even above that minimum. |
+| Shortcut does nothing | Keep Screenroom running, finish any open dialog, and check **Settings** for a shortcut conflict. Another app may already own **⌘⇧6** or **⌘⇧7**. Try the capture button or menu bar command to isolate the problem. |
+| Cannot quit or install an update | Stop the active recording and let saving finish. Export unsaved screenshot annotations, then choose **Screenroom → Quit Screenroom** or press **⌘Q**. |
+| Compiler cannot find an API | Check that your selected macOS SDK is 15 or later and that the selected Swift compiler is from a compatible Xcode installation. |
+
+Saved files stay on your Mac:
+
+- Screenshots: `~/Pictures/Screenroom/`
+- Recordings: `~/Movies/Screenroom/`
+- Library index: `~/Library/Application Support/Screenroom/library.json`
+
+Annotations must be exported or copied to preserve the edited image. The original screenshot stays saved. Removing an entry from the library does not delete its media file.
+
+To update a source installation with no local changes, run `git pull --ff-only`, quit Screenroom, and run the build/install steps again with the same signing identity. To uninstall, quit and move the installed app to the Trash; your saved captures remain in the folders above.

@@ -6,13 +6,28 @@ BUILD_DIR="$ROOT/.build"
 DIST_DIR="$ROOT/dist"
 APP_PATH="$DIST_DIR/Screenroom.app"
 CONFIGURATION="${CONFIGURATION:-release}"
-SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
 export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$BUILD_DIR/module-cache"
 
 if ! xcrun --find swift >/dev/null 2>&1; then
     printf '%s\n' 'Swift is unavailable. Install Xcode or its command line tools first.' >&2
     exit 1
+fi
+
+# Privacy grants are tied to the signing requirement. Ad-hoc signing changes
+# that requirement with every build, invalidating Screen Recording access.
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+    IDENTITIES="$(/usr/bin/security find-identity -v -p codesigning)"
+    SIGNING_IDENTITY="$(printf '%s\n' "$IDENTITIES" | sed -nE 's/^[[:space:]]*[0-9]+\) ([A-Fa-f0-9]+) "Developer ID Application:.*$/\1/p' | head -n 1)"
+    if [[ -z "$SIGNING_IDENTITY" ]]; then
+        SIGNING_IDENTITY="$(printf '%s\n' "$IDENTITIES" | sed -nE 's/^[[:space:]]*[0-9]+\) ([A-Fa-f0-9]+) "Apple Development:.*$/\1/p' | head -n 1)"
+    fi
+    if [[ -z "$SIGNING_IDENTITY" ]]; then
+        printf '%s\n' 'No Apple code-signing identity is available. Create an Apple Development certificate in Xcode, or set SIGNING_IDENTITY to an existing identity.' >&2
+        printf '%s\n' 'For a temporary build only, use SIGNING_IDENTITY=-. Its privacy permissions will not survive changed builds.' >&2
+        exit 1
+    fi
 fi
 
 mkdir -p "$BUILD_DIR/module-cache" "$BUILD_DIR/cache" "$BUILD_DIR/config" "$BUILD_DIR/security" "$DIST_DIR"
@@ -41,6 +56,7 @@ mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources"
 cp "$BIN_DIR/Screenroom" "$STAGED_APP/Contents/MacOS/Screenroom"
 cp "$ROOT/Resources/Info.plist" "$STAGED_APP/Contents/Info.plist"
 cp "$BUILD_DIR/assets/Screenroom.icns" "$STAGED_APP/Contents/Resources/Screenroom.icns"
+cp "$ROOT/LICENSE" "$STAGED_APP/Contents/Resources/LICENSE"
 printf 'APPL????' > "$STAGED_APP/Contents/PkgInfo"
 chmod 755 "$STAGED_APP/Contents/MacOS/Screenroom"
 /usr/bin/plutil -lint "$STAGED_APP/Contents/Info.plist"
@@ -56,4 +72,4 @@ fi
 rm -rf "$APP_PATH"
 mv "$STAGED_APP" "$APP_PATH"
 printf '\nBuilt: %s\n' "$APP_PATH"
-printf '%s\n' 'Launch with ./scripts/run.sh --no-build or open the app in Finder.'
+printf '%s\n' 'Install with ./scripts/install-app.sh --no-build, then open Screenroom from Applications.'
